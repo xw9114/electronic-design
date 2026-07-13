@@ -36,6 +36,22 @@ extern "C" {
 #define JY61P_ANGLE_RANGE_DEG  180.0f
 #endif
 
+#ifndef JY61P_K_ANGLE
+#define JY61P_K_ANGLE          0.08f
+#endif
+
+#ifndef JY61P_K_BIAS
+#define JY61P_K_BIAS           0.003f
+#endif
+
+#ifndef JY61P_ANGLE_REJECT_DEG
+#define JY61P_ANGLE_REJECT_DEG 45.0f
+#endif
+
+#ifndef JY61P_MAX_DT_S
+#define JY61P_MAX_DT_S         0.05f
+#endif
+
 #ifndef JY61P_VALID_TIMEOUT_MS
 #define JY61P_VALID_TIMEOUT_MS 50u
 #endif
@@ -63,13 +79,6 @@ extern "C" {
 #ifndef JY61P_STATIONARY_BIAS_ALPHA
 #define JY61P_STATIONARY_BIAS_ALPHA 0.003f
 #endif
-
-/*
- * 姿态输出策略：
- * - Roll / Pitch：直接使用模块 0x53 欧拉角；
- * - Yaw：做跨 ±180° 连续化，并支持软件清零；
- * - Z 轴角速度：通过 JY61P_GetYawRateDps() 输出，供控制器微分项使用。
- */
 
 /* ============================= 数据结构 ============================= */
 
@@ -103,6 +112,7 @@ typedef struct {
 
     uint32_t last_frame_ms;
     uint32_t last_update_ms;
+    uint32_t last_estimate_ms;
     uint32_t last_angle_ms;
 
     uint32_t frame_count;
