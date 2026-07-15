@@ -10,7 +10,32 @@
 |---|---|---|---|
 | JY61P 姿态传感器 | [`jy61p_attitude.c`](./jy61p_attitude.c) / [`jy61p_attitude.h`](./jy61p_attitude.h) | 可用 | 小车航向保持、原地转角、姿态反馈、控制器微分项输入 |
 
+| 树莓派视觉控制脚本 | [`树莓派_1.py`](./树莓派_1.py) | 可用 | 树莓派 USB 摄像头、A4 黑框与圆心跟踪、Emm42 双电机控制 |
 > 后续如果继续加入编码器、超声波、TOF、气压计、通信模块等驱动，建议按同样的“一组 `.c/.h` + README 表格入口”方式维护。
+## 树莓派视觉控制脚本
+
+[`树莓派_1.py`](./树莓派_1.py) 是一个基于 Raspberry Pi 的视觉跟踪与双电机控制程序，主要功能包括：
+
+- 使用 USB 摄像头读取 `/dev/video0` 视频；
+- 通过 OpenCV 检测 A4 黑色矩形框并进行透视变换；
+- 在透视图中检测目标圆心并计算跟踪误差；
+- 通过 `/dev/serial0` 使用 Emm42 V5.0 串口协议控制两个电机；
+- 可选开启 Flask 网页预览，默认地址为 `http://xw.local:5000`。
+
+### 安装依赖
+
+```bash
+sudo apt update
+sudo apt install -y python3-opencv python3-numpy python3-serial python3-flask
+```
+
+### 运行
+
+```bash
+python3 树莓派_1.py
+```
+
+使用 GPIO 串口时请确保为 3.3V TTL 电平；如果电机驱动器为 RS-232/RS-485 电平，需先使用对应的电平转换模块。
 
 ## JY61P 驱动特性
 
