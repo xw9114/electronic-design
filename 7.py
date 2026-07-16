@@ -41,6 +41,8 @@ TRACK_ASPECT_CHANGE_MIN = 0.45
 TRACK_ASPECT_CHANGE_MAX = 2.20
 TRACK_ASPECT_REACQUIRE_SCORE = 0.84
 TRACK_ASPECT_SIM_WEIGHT = 1700.0
+# Smooth accepted box geometry before using it as next-frame prior.
+TRACK_GEOMETRY_EMA_ALPHA = 0.35
 
 # 控制瞄准点位于检测框中心向下15%的位置。
 # 改为0就是正中心，正数向下，负数向上。
@@ -58,12 +60,14 @@ CAMERA_BUFF_NUM = 1
 DISPLAY_EVERY_N_FRAMES = 4
 DISPLAY_STABLE_EVERY_N_FRAMES = 5
 DISPLAY_SUPER_STABLE_EVERY_N_FRAMES = 6
+DISPLAY_ULTRA_STABLE_EVERY_N_FRAMES = 8
 
-# Run YOLO every frame before lock; after stable lock, use adaptive 2/3-frame cadence.
+# Run YOLO every frame before lock; after stable lock, use adaptive 2/3/4-frame cadence.
 # Skipped frames use velocity prediction for control and do not count as detection misses.
 DETECT_EVERY_N_FRAMES = 1
 LOCKED_DETECT_EVERY_N_FRAMES = 2
 SUPER_STABLE_DETECT_EVERY_N_FRAMES = 3
+ULTRA_STABLE_DETECT_EVERY_N_FRAMES = 4
 STABLE_SKIP_CONFIRM_FRAMES = 3
 SUPER_STABLE_CONFIRM_FRAMES = 6
 
@@ -83,6 +87,27 @@ SKIP_MAX_VELOCITY_Y = 8.0
 SUPER_SKIP_MIN_SCORE = 0.86
 SUPER_SKIP_MAX_VELOCITY_X = 4.0
 SUPER_SKIP_MAX_VELOCITY_Y = 3.0
+ULTRA_SKIP_MIN_SCORE = 0.92
+ULTRA_SKIP_MAX_ERROR_X = 20
+ULTRA_SKIP_MAX_ERROR_Y = 16
+ULTRA_SKIP_MAX_VELOCITY_X = 1.8
+ULTRA_SKIP_MAX_VELOCITY_Y = 1.4
+# If prediction drifts beyond this tighter window, verify with YOLO next frame.
+PREDICT_FORCE_DETECT_ERROR_X = 42
+PREDICT_FORCE_DETECT_ERROR_Y = 34
+
+# Smooth YOLO confidence for stable-skip decisions.
+# Single-frame score noise should not constantly enter/exit skip mode.
+SCORE_EMA_ALPHA = 0.35
+
+# Stable-count hysteresis: weak one-frame score/velocity jitter decays the
+# stable counter instead of immediately dropping to full-rate YOLO. Large
+# error or fast movement still resets immediately for accuracy.
+STABLE_COUNT_DECAY = 1
+STABLE_HARD_RESET_ERROR_X = SKIP_MAX_ERROR_X + 25
+STABLE_HARD_RESET_ERROR_Y = SKIP_MAX_ERROR_Y + 20
+STABLE_HARD_RESET_VELOCITY_X = SKIP_MAX_VELOCITY_X + 8.0
+STABLE_HARD_RESET_VELOCITY_Y = SKIP_MAX_VELOCITY_Y + 6.0
 
 # If a locked target suddenly jumps outside MAX_TRACK_JUMP, only accept it
 # when the model is very confident; otherwise count it as a miss.
@@ -95,6 +120,13 @@ MEASURE_JUMP_REACQUIRE_SCORE = 0.84
 TRACK_SCORE_WEIGHT = 3500
 TRACK_AREA_WEIGHT = 0.025
 TRACK_AREA_SIM_WEIGHT = 2600.0
+# Mildly prefer candidates that continue the filtered motion direction.
+# This helps when two similar boxes are close, without hard rejecting reversal.
+TRACK_DIRECTION_MIN_VELOCITY = 2.0
+TRACK_DIRECTION_REVERSE_PENALTY = 900.0
+# Keep the locked target class unless a different class has very high score.
+TRACK_CLASS_REACQUIRE_SCORE = 0.88
+TRACK_CLASS_SWITCH_PENALTY = 5000.0
 BOOT_SCORE_WEIGHT = 120000
 BOOT_AREA_WEIGHT = 1.0
 
@@ -142,6 +174,18 @@ PAN_KD = 0.02
 # 根据目标中心移动速度向前预测若干帧，补偿YOLO和双缓冲延迟。
 PAN_PREDICT_FRAMES = 1.3
 TILT_PREDICT_FRAMES = 0.8
+# Prediction confidence decays on longer skip runs to avoid overshoot.
+# Values are deliberately simple branches for MaixPy speed.
+PREDICT_DECAY_2 = 0.88
+PREDICT_DECAY_3 = 0.74
+PREDICT_DECAY_4 = 0.60
+# Reduce velocity feed-forward near center to avoid overshoot; keep it strong
+# when the target is still far from the aiming point.
+CONTROL_PREDICT_NEAR_ERROR = 12
+CONTROL_PREDICT_MID_ERROR = 36
+CONTROL_PREDICT_NEAR_GAIN = 0.35
+CONTROL_PREDICT_MID_GAIN = 0.70
+CONTROL_PREDICT_FAR_GAIN = 1.00
 MAX_PREDICT_OFFSET_X = 35
 MAX_PREDICT_OFFSET_Y = 26
 MAX_RAW_VELOCITY_X = 26.0
@@ -150,6 +194,19 @@ MAX_FILTERED_VELOCITY_X = 18.0
 MAX_FILTERED_VELOCITY_Y = 14.0
 PAN_VELOCITY_FILTER_ALPHA = 0.55
 TILT_VELOCITY_FILTER_ALPHA = 0.45
+# Adaptive velocity smoothing: quiet near center, responsive when far/fast.
+VELOCITY_FILTER_ALPHA_NEAR = 0.28
+VELOCITY_FILTER_ALPHA_MID = 0.48
+VELOCITY_FILTER_ALPHA_FAST = 0.72
+VELOCITY_FILTER_NEAR_ERROR = 14
+VELOCITY_FILTER_MID_ERROR = 42
+VELOCITY_FILTER_FAST_SPEED = 8.0
+TILT_VELOCITY_ALPHA_SCALE = 0.85
+# When the target is centered and measured speed is almost zero, decay stale
+# velocity faster so prediction does not amplify YOLO box jitter.
+VELOCITY_ZERO_ERROR = 10
+VELOCITY_ZERO_RAW_SPEED = 0.9
+VELOCITY_ZERO_DECAY = 0.45
 
 TILT_KP = 0.30
 TILT_KI = 0.06
@@ -172,6 +229,10 @@ MISS_TOLERANCE_FRAMES = 2
 MISS_HOLD_MIN_SCORE = 0.70
 MISS_HOLD_MAX_VELOCITY_X = 14.0
 MISS_HOLD_MAX_VELOCITY_Y = 10.0
+# Decay confidence on rejected/missed detections so stale locks fade out.
+# Jump rejection is stronger than ordinary miss because it saw a conflicting box.
+MISS_SCORE_DECAY = 0.82
+JUMP_SCORE_DECAY = 0.72
 LOST_STOP_MS = 220
 CMD_INTERVAL_MS = 20
 
@@ -310,6 +371,54 @@ def get_pan_kp(error):
     return PAN_KP_FAR
 
 
+def update_score_ema(score_ema, score_value):
+    """Confidence EMA for stable tracking gates."""
+    if score_ema <= 0.0:
+        return score_value
+    a = SCORE_EMA_ALPHA
+    return (1.0 - a) * score_ema + a * score_value
+
+
+def decay_score_ema(score_ema, decay):
+    """Fade stale confidence during miss/jump hold frames."""
+    if score_ema <= 0.0:
+        return 0.0
+    return score_ema * decay
+
+
+def update_ema_value(old_value, new_value, alpha):
+    """Small generic EMA helper for tracking priors."""
+    if old_value <= 0:
+        return new_value
+    return (1.0 - alpha) * old_value + alpha * new_value
+
+
+def update_stable_detect_count(
+    stable_count,
+    detection_stable,
+    error_x,
+    error_y,
+    velocity_x,
+    velocity_y
+):
+    """Hysteresis for adaptive YOLO skip mode."""
+    if detection_stable:
+        return min(
+            stable_count + 1,
+            SUPER_STABLE_CONFIRM_FRAMES
+        )
+
+    if (
+        abs(error_x) > STABLE_HARD_RESET_ERROR_X
+        or abs(error_y) > STABLE_HARD_RESET_ERROR_Y
+        or abs(velocity_x) > STABLE_HARD_RESET_VELOCITY_X
+        or abs(velocity_y) > STABLE_HARD_RESET_VELOCITY_Y
+    ):
+        return 0
+
+    return max(0, stable_count - STABLE_COUNT_DECAY)
+
+
 def get_target_filter_alpha(raw_cx, raw_cy, filtered_cx, filtered_cy):
     """Adaptive center smoothing: stable near center, fast when far or jumping."""
     if filtered_cx is None or filtered_cy is None:
@@ -336,7 +445,15 @@ def get_target_filter_alpha(raw_cx, raw_cy, filtered_cx, filtered_cy):
     return TARGET_FILTER_ALPHA_FAST
 
 
-def choose_yolo_target(objs, previous_center, previous_area, previous_aspect):
+def choose_yolo_target(
+    objs,
+    previous_center,
+    previous_area,
+    previous_aspect,
+    previous_class_id,
+    velocity_x,
+    velocity_y
+):
     """
     Fast and stable target picker.
 
@@ -358,6 +475,11 @@ def choose_yolo_target(objs, previous_center, previous_area, previous_aspect):
     has_previous = previous_center is not None
     has_previous_area = previous_area is not None and previous_area > 0
     has_previous_aspect = previous_aspect is not None and previous_aspect > 0
+    has_previous_class = previous_class_id is not None and previous_class_id >= 0
+    use_direction = (
+        abs(velocity_x) >= TRACK_DIRECTION_MIN_VELOCITY
+        or abs(velocity_y) >= TRACK_DIRECTION_MIN_VELOCITY
+    )
     jump_limit_sq = MAX_TRACK_JUMP * MAX_TRACK_JUMP
     max_box_area = int(IMG_W * IMG_H * MAX_BOX_AREA_RATIO)
 
@@ -386,6 +508,7 @@ def choose_yolo_target(objs, previous_center, previous_area, previous_aspect):
             continue
 
         score_value = float(obj.score)
+        class_id = obj.class_id
         cx = obj.x + obj.w // 2
         cy = (
             obj.y
@@ -394,6 +517,12 @@ def choose_yolo_target(objs, previous_center, previous_area, previous_aspect):
         )
 
         if has_previous:
+            class_switch_penalty = 0.0
+            if has_previous_class and class_id != previous_class_id:
+                if score_value < TRACK_CLASS_REACQUIRE_SCORE:
+                    continue
+                class_switch_penalty = TRACK_CLASS_SWITCH_PENALTY
+
             area_similarity_penalty = 0.0
             if has_previous_area:
                 area_change = float(area) / float(previous_area)
@@ -421,10 +550,19 @@ def choose_yolo_target(objs, previous_center, previous_area, previous_aspect):
                 )
 
             d2 = distance_sq(cx, cy, px, py)
+            direction_penalty = 0.0
+            if use_direction:
+                dx = cx - px
+                dy = cy - py
+                if dx * velocity_x + dy * velocity_y < 0:
+                    direction_penalty = TRACK_DIRECTION_REVERSE_PENALTY
+
             rank = (
                 d2
                 + area_similarity_penalty
                 + aspect_similarity_penalty
+                + direction_penalty
+                + class_switch_penalty
                 - score_value * TRACK_SCORE_WEIGHT
                 - area * TRACK_AREA_WEIGHT
             )
@@ -535,16 +673,67 @@ def calc_axis_command(
 
 
 
+def get_predict_decay(frames):
+    """Lower prediction gain as skipped frames accumulate."""
+    if frames <= 1:
+        return 1.0
+    if frames == 2:
+        return PREDICT_DECAY_2
+    if frames == 3:
+        return PREDICT_DECAY_3
+    return PREDICT_DECAY_4
+
+
+def get_control_predict_gain(error_x, error_y):
+    """Adaptive velocity feed-forward gain for motor control."""
+    abs_error = max(abs(error_x), abs(error_y))
+    if abs_error <= CONTROL_PREDICT_NEAR_ERROR:
+        return CONTROL_PREDICT_NEAR_GAIN
+    if abs_error <= CONTROL_PREDICT_MID_ERROR:
+        return CONTROL_PREDICT_MID_GAIN
+    return CONTROL_PREDICT_FAR_GAIN
+
+
+def get_velocity_filter_alpha(error_x, error_y, raw_velocity_x, raw_velocity_y):
+    """Adaptive velocity EMA alpha for stable skip/prediction."""
+    abs_error = max(abs(error_x), abs(error_y))
+    abs_speed = max(abs(raw_velocity_x), abs(raw_velocity_y))
+    if abs_speed >= VELOCITY_FILTER_FAST_SPEED:
+        return VELOCITY_FILTER_ALPHA_FAST
+    if abs_error <= VELOCITY_FILTER_NEAR_ERROR:
+        return VELOCITY_FILTER_ALPHA_NEAR
+    if abs_error <= VELOCITY_FILTER_MID_ERROR:
+        return VELOCITY_FILTER_ALPHA_MID
+    return VELOCITY_FILTER_ALPHA_FAST
+
+
+def should_decay_stale_velocity(error_x, error_y, raw_velocity_x, raw_velocity_y):
+    """True when near-center measurements look stationary."""
+    return (
+        max(abs(error_x), abs(error_y)) <= VELOCITY_ZERO_ERROR
+        and max(abs(raw_velocity_x), abs(raw_velocity_y)) <= VELOCITY_ZERO_RAW_SPEED
+    )
+
+
+def should_force_detect_from_prediction(error_x, error_y):
+    """Request YOLO next frame if prediction is leaving the stable window."""
+    return (
+        abs(error_x) > PREDICT_FORCE_DETECT_ERROR_X
+        or abs(error_y) > PREDICT_FORCE_DETECT_ERROR_Y
+    )
+
+
 def predict_target_state(base_cx, base_cy, velocity_x, velocity_y, frames):
     """Predict target center and error for frames without usable YOLO output."""
     frames = max(1, int(frames))
+    decay = get_predict_decay(frames)
     offset_x = clamp(
-        velocity_x * PAN_PREDICT_FRAMES * frames,
+        velocity_x * PAN_PREDICT_FRAMES * frames * decay,
         -MAX_PREDICT_OFFSET_X,
         MAX_PREDICT_OFFSET_X
     )
     offset_y = clamp(
-        velocity_y * TILT_PREDICT_FRAMES * frames,
+        velocity_y * TILT_PREDICT_FRAMES * frames * decay,
         -MAX_PREDICT_OFFSET_Y,
         MAX_PREDICT_OFFSET_Y
     )
@@ -660,6 +849,8 @@ def handle_predict_hold(
         last_cmd_ms,
         last_pan_cmd,
         last_tilt_cmd,
+        predict_error_x,
+        predict_error_y,
     )
 
 def update_motor_control(
@@ -806,8 +997,12 @@ disp = display.Display()
 # ============================================================
 last_target_center = None
 last_target_score = 0.0
+last_target_score_ema = 0.0
+last_target_class_id = -1
 last_target_area = 0
+last_target_area_ema = 0.0
 last_target_aspect = 0.0
+last_target_aspect_ema = 0.0
 filtered_cx = None
 filtered_cy = None
 
@@ -816,12 +1011,18 @@ last_cmd_ms = 0
 
 previous_error_x = 0
 previous_error_y = 0
+# Latest visual error is updated every detection/prediction frame.
+# Use it for adaptive YOLO cadence instead of PID previous_error,
+# because PID state is rate-limited by CMD_INTERVAL_MS.
+track_error_x = 0
+track_error_y = 0
 pan_integral = 0.0
 tilt_integral = 0.0
 last_control_ms = 0
 
 previous_target_cx = None
 previous_target_cy = None
+previous_target_frame = 0
 filtered_velocity_x = 0.0
 filtered_velocity_y = 0.0
 
@@ -837,6 +1038,9 @@ fps_value = 0
 last_fps_ms = time.ticks_ms()
 display_frame_count = 0
 detect_frame_count = 0
+total_frame_count = 0
+last_detect_period = DETECT_EVERY_N_FRAMES
+force_detect_next = False
 predict_only_count = 0
 
 
@@ -856,27 +1060,38 @@ try:
 
         display_frame_count += 1
         detect_frame_count += 1
+        total_frame_count += 1
 
         locked_stable = (
             lock_confirm_count >= LOCK_CONFIRM_FRAMES
             and stable_detect_count >= STABLE_SKIP_CONFIRM_FRAMES
             and filtered_cx is not None
             and miss_count == 0
-            and last_target_score >= SKIP_MIN_SCORE
-            and abs(previous_error_x) <= SKIP_MAX_ERROR_X
-            and abs(previous_error_y) <= SKIP_MAX_ERROR_Y
+            and last_target_score_ema >= SKIP_MIN_SCORE
+            and abs(track_error_x) <= SKIP_MAX_ERROR_X
+            and abs(track_error_y) <= SKIP_MAX_ERROR_Y
             and abs(filtered_velocity_x) <= SKIP_MAX_VELOCITY_X
             and abs(filtered_velocity_y) <= SKIP_MAX_VELOCITY_Y
         )
         super_stable = (
             locked_stable
             and stable_detect_count >= SUPER_STABLE_CONFIRM_FRAMES
-            and last_target_score >= SUPER_SKIP_MIN_SCORE
+            and last_target_score_ema >= SUPER_SKIP_MIN_SCORE
             and abs(filtered_velocity_x) <= SUPER_SKIP_MAX_VELOCITY_X
             and abs(filtered_velocity_y) <= SUPER_SKIP_MAX_VELOCITY_Y
         )
+        ultra_stable = (
+            super_stable
+            and last_target_score_ema >= ULTRA_SKIP_MIN_SCORE
+            and abs(track_error_x) <= ULTRA_SKIP_MAX_ERROR_X
+            and abs(track_error_y) <= ULTRA_SKIP_MAX_ERROR_Y
+            and abs(filtered_velocity_x) <= ULTRA_SKIP_MAX_VELOCITY_X
+            and abs(filtered_velocity_y) <= ULTRA_SKIP_MAX_VELOCITY_Y
+        )
 
-        if super_stable:
+        if ultra_stable:
+            display_period = DISPLAY_ULTRA_STABLE_EVERY_N_FRAMES
+        elif super_stable:
             display_period = DISPLAY_SUPER_STABLE_EVERY_N_FRAMES
         elif locked_stable:
             display_period = DISPLAY_STABLE_EVERY_N_FRAMES
@@ -888,18 +1103,31 @@ try:
         if show_frame:
             display_frame_count = 0
 
-        if super_stable:
+        if ultra_stable:
+            detect_period = ULTRA_STABLE_DETECT_EVERY_N_FRAMES
+        elif super_stable:
             detect_period = SUPER_STABLE_DETECT_EVERY_N_FRAMES
         elif locked_stable:
             detect_period = LOCKED_DETECT_EVERY_N_FRAMES
         else:
             detect_period = DETECT_EVERY_N_FRAMES
         detect_period = max(1, int(detect_period))
+        if detect_period != last_detect_period:
+            # State changed between full/skip detection. Reset the phase so the
+            # first frame in the new state is verified by YOLO immediately.
+            detect_frame_count = 0
+            predict_only_count = 0
+            last_detect_period = detect_period
 
-        run_detector = (detect_frame_count % detect_period == 0)
+        run_detector = (
+            force_detect_next
+            or detect_frame_count % detect_period == 0
+        )
+        if run_detector:
+            force_detect_next = False
 
         if run_detector:
-            if super_stable:
+            if ultra_stable or super_stable:
                 detect_conf = SUPER_STABLE_CONF_THRESHOLD
                 detect_iou = SUPER_STABLE_IOU_THRESHOLD
             elif locked_stable:
@@ -932,8 +1160,11 @@ try:
             target = choose_yolo_target(
                 objs,
                 selection_center,
-                last_target_area,
-                last_target_aspect
+                last_target_area_ema,
+                last_target_aspect_ema,
+                last_target_class_id,
+                filtered_velocity_x,
+                filtered_velocity_y
             )
         else:
             # Intentional skip: prediction-only frame.
@@ -964,17 +1195,26 @@ try:
 
             reject_measurement = False
             if filtered_cx is not None and filtered_cy is not None:
+                expected_cx = filtered_cx
+                expected_cy = filtered_cy
+                if selection_center is not None:
+                    expected_cx, expected_cy = selection_center
+
                 reject_measurement = (
                     score_value < MEASURE_JUMP_REACQUIRE_SCORE
                     and (
-                        abs(raw_cx - filtered_cx) > MEASURE_JUMP_REJECT_X
-                        or abs(raw_cy - filtered_cy) > MEASURE_JUMP_REJECT_Y
+                        abs(raw_cx - expected_cx) > MEASURE_JUMP_REJECT_X
+                        or abs(raw_cy - expected_cy) > MEASURE_JUMP_REJECT_Y
                     )
                 )
 
             if reject_measurement:
                 stable_detect_count = 0
                 miss_count += 1
+                last_target_score_ema = decay_score_ema(
+                    last_target_score_ema,
+                    JUMP_SCORE_DECAY
+                )
                 (
                     predict_only_count,
                     previous_error_x,
@@ -985,6 +1225,8 @@ try:
                     last_cmd_ms,
                     last_pan_cmd,
                     last_tilt_cmd,
+                    track_error_x,
+                    track_error_y,
                 ) = handle_predict_hold(
                     now,
                     img,
@@ -1015,13 +1257,20 @@ try:
                     lock_confirm_count = 0
                     stable_detect_count = 0
                     last_target_score = 0.0
+                    last_target_score_ema = 0.0
+                    last_target_class_id = -1
                     last_target_area = 0
+                    last_target_area_ema = 0.0
                     last_target_aspect = 0.0
+                    last_target_aspect_ema = 0.0
                     pan_integral = 0.0
                     tilt_integral = 0.0
                     last_control_ms = 0
+                    track_error_x = 0
+                    track_error_y = 0
                     previous_target_cx = None
                     previous_target_cy = None
+                    previous_target_frame = 0
                     filtered_velocity_x = 0.0
                     filtered_velocity_y = 0.0
                     predict_only_count = 0
@@ -1029,8 +1278,23 @@ try:
             else:
                 predict_only_count = 0
                 last_target_score = score_value
+                last_target_class_id = obj.class_id
+                last_target_score_ema = update_score_ema(
+                    last_target_score_ema,
+                    score_value
+                )
                 last_target_area = area
+                last_target_area_ema = update_ema_value(
+                    last_target_area_ema,
+                    float(area),
+                    TRACK_GEOMETRY_EMA_ALPHA
+                )
                 last_target_aspect = aspect
+                last_target_aspect_ema = update_ema_value(
+                    last_target_aspect_ema,
+                    aspect,
+                    TRACK_GEOMETRY_EMA_ALPHA
+                )
                 last_seen_ms = now
                 miss_count = 0
                 lock_confirm_count = min(
@@ -1065,22 +1329,41 @@ try:
                     raw_velocity_x = 0.0
                     raw_velocity_y = 0.0
                 else:
+                    frame_gap = max(
+                        1,
+                        total_frame_count - previous_target_frame
+                    )
+                    # YOLO may run every 2/3/4 frames in stable modes. Normalize
+                    # the measured displacement back to per-frame velocity.
                     raw_velocity_x = clamp(
-                        target_cx - previous_target_cx,
+                        float(target_cx - previous_target_cx) / frame_gap,
                         -MAX_RAW_VELOCITY_X,
                         MAX_RAW_VELOCITY_X
                     )
                     raw_velocity_y = clamp(
-                        target_cy - previous_target_cy,
+                        float(target_cy - previous_target_cy) / frame_gap,
                         -MAX_RAW_VELOCITY_Y,
                         MAX_RAW_VELOCITY_Y
                     )
 
                 previous_target_cx = target_cx
                 previous_target_cy = target_cy
+                previous_target_frame = total_frame_count
 
-                va_x = PAN_VELOCITY_FILTER_ALPHA
-                va_y = TILT_VELOCITY_FILTER_ALPHA
+                velocity_alpha = get_velocity_filter_alpha(
+                    error_x,
+                    error_y,
+                    raw_velocity_x,
+                    raw_velocity_y
+                )
+                # Use adaptive alpha directly so the FAST branch is not capped
+                # by the nominal base values. Tilt keeps a small damping scale.
+                va_x = velocity_alpha
+                va_y = clamp(
+                    velocity_alpha * TILT_VELOCITY_ALPHA_SCALE,
+                    VELOCITY_FILTER_ALPHA_NEAR,
+                    VELOCITY_FILTER_ALPHA_FAST
+                )
                 filtered_velocity_x = clamp(
                     (1.0 - va_x) * filtered_velocity_x
                     + va_x * raw_velocity_x,
@@ -1093,30 +1376,50 @@ try:
                     -MAX_FILTERED_VELOCITY_Y,
                     MAX_FILTERED_VELOCITY_Y
                 )
+                if should_decay_stale_velocity(
+                    error_x,
+                    error_y,
+                    raw_velocity_x,
+                    raw_velocity_y
+                ):
+                    filtered_velocity_x *= VELOCITY_ZERO_DECAY
+                    filtered_velocity_y *= VELOCITY_ZERO_DECAY
 
+                control_predict_gain = get_control_predict_gain(
+                    error_x,
+                    error_y
+                )
                 control_error_x = int(
                     error_x
-                    + filtered_velocity_x * PAN_PREDICT_FRAMES
+                    + filtered_velocity_x
+                    * PAN_PREDICT_FRAMES
+                    * control_predict_gain
                 )
                 control_error_y = int(
                     error_y
-                    + filtered_velocity_y * TILT_PREDICT_FRAMES
+                    + filtered_velocity_y
+                    * TILT_PREDICT_FRAMES
+                    * control_predict_gain
                 )
+                track_error_x = control_error_x
+                track_error_y = control_error_y
 
                 detection_stable = (
-                    score_value >= SKIP_MIN_SCORE
+                    last_target_score_ema >= SKIP_MIN_SCORE
+                    and score_value >= TRACK_CONF_THRESHOLD
                     and abs(error_x) <= SKIP_MAX_ERROR_X
                     and abs(error_y) <= SKIP_MAX_ERROR_Y
                     and abs(filtered_velocity_x) <= SKIP_MAX_VELOCITY_X
                     and abs(filtered_velocity_y) <= SKIP_MAX_VELOCITY_Y
                 )
-                if detection_stable:
-                    stable_detect_count = min(
-                        stable_detect_count + 1,
-                        SUPER_STABLE_CONFIRM_FRAMES
-                    )
-                else:
-                    stable_detect_count = 0
+                stable_detect_count = update_stable_detect_count(
+                    stable_detect_count,
+                    detection_stable,
+                    track_error_x,
+                    track_error_y,
+                    filtered_velocity_x,
+                    filtered_velocity_y
+                )
 
                 if show_frame:
                     img.draw_rect(
@@ -1194,24 +1497,8 @@ try:
         else:
             if not run_detector:
                 if filtered_cx is not None and filtered_cy is not None:
-                    predict_only_count = min(
-                        predict_only_count + 1,
-                        max(1, detect_period)
-                    )
                     (
-                        predict_cx,
-                        predict_cy,
-                        predict_error_x,
-                        predict_error_y,
-                    ) = predict_target_state(
-                        filtered_cx,
-                        filtered_cy,
-                        filtered_velocity_x,
-                        filtered_velocity_y,
-                        predict_only_count
-                    )
-
-                    (
+                        predict_only_count,
                         previous_error_x,
                         previous_error_y,
                         pan_integral,
@@ -1220,10 +1507,19 @@ try:
                         last_cmd_ms,
                         last_pan_cmd,
                         last_tilt_cmd,
-                    ) = update_motor_control(
+                        track_error_x,
+                        track_error_y,
+                    ) = handle_predict_hold(
                         now,
-                        predict_error_x,
-                        predict_error_y,
+                        img,
+                        show_frame,
+                        "PRED",
+                        filtered_cx,
+                        filtered_cy,
+                        filtered_velocity_x,
+                        filtered_velocity_y,
+                        predict_only_count,
+                        detect_period,
                         previous_error_x,
                         previous_error_y,
                         pan_integral,
@@ -1233,55 +1529,31 @@ try:
                         last_pan_cmd,
                         last_tilt_cmd
                     )
-
-                    if show_frame:
-                        img.draw_cross(
-                            predict_cx,
-                            predict_cy,
-                            image.COLOR_YELLOW,
-                            size=8,
-                            thickness=1
-                        )
-                        img.draw_string(
-                            4,
-                            4,
-                            "PRED EX:{} EY:{}".format(
-                                predict_error_x,
-                                predict_error_y
-                            ),
-                            image.COLOR_YELLOW
-                        )
+                    if should_force_detect_from_prediction(
+                        track_error_x,
+                        track_error_y
+                    ):
+                        force_detect_next = True
             else:
                 miss_count += 1
                 stable_detect_count = 0
+                last_target_score_ema = decay_score_ema(
+                    last_target_score_ema,
+                    MISS_SCORE_DECAY
+                )
 
                 can_predict_miss = (
                     miss_count <= MISS_TOLERANCE_FRAMES
                     and lock_confirm_count >= LOCK_CONFIRM_FRAMES
-                    and last_target_score >= MISS_HOLD_MIN_SCORE
+                    and last_target_score_ema >= MISS_HOLD_MIN_SCORE
                     and filtered_cx is not None
                     and filtered_cy is not None
                     and abs(filtered_velocity_x) <= MISS_HOLD_MAX_VELOCITY_X
                     and abs(filtered_velocity_y) <= MISS_HOLD_MAX_VELOCITY_Y
                 )
                 if can_predict_miss:
-                    predict_only_count = min(
-                        predict_only_count + 1,
-                        max(1, detect_period)
-                    )
                     (
-                        predict_cx,
-                        predict_cy,
-                        predict_error_x,
-                        predict_error_y,
-                    ) = predict_target_state(
-                        filtered_cx,
-                        filtered_cy,
-                        filtered_velocity_x,
-                        filtered_velocity_y,
-                        predict_only_count
-                    )
-                    (
+                        predict_only_count,
                         previous_error_x,
                         previous_error_y,
                         pan_integral,
@@ -1290,10 +1562,19 @@ try:
                         last_cmd_ms,
                         last_pan_cmd,
                         last_tilt_cmd,
-                    ) = update_motor_control(
+                        track_error_x,
+                        track_error_y,
+                    ) = handle_predict_hold(
                         now,
-                        predict_error_x,
-                        predict_error_y,
+                        img,
+                        show_frame,
+                        "MISS HOLD",
+                        filtered_cx,
+                        filtered_cy,
+                        filtered_velocity_x,
+                        filtered_velocity_y,
+                        predict_only_count,
+                        detect_period,
                         previous_error_x,
                         previous_error_y,
                         pan_integral,
@@ -1303,36 +1584,30 @@ try:
                         last_pan_cmd,
                         last_tilt_cmd
                     )
-
-                    if show_frame:
-                        img.draw_cross(
-                            predict_cx,
-                            predict_cy,
-                            image.COLOR_YELLOW,
-                            size=8,
-                            thickness=1
-                        )
-                        img.draw_string(
-                            4,
-                            18,
-                            "MISS HOLD:{} V:{:.1f}".format(
-                                miss_count,
-                                abs(filtered_velocity_x)
-                            ),
-                            image.COLOR_YELLOW
-                        )
+                    if should_force_detect_from_prediction(
+                        track_error_x,
+                        track_error_y
+                    ):
+                        force_detect_next = True
 
                 if miss_count > MISS_TOLERANCE_FRAMES:
                     lock_confirm_count = 0
                     stable_detect_count = 0
                     last_target_score = 0.0
+                    last_target_score_ema = 0.0
+                    last_target_class_id = -1
                     last_target_area = 0
+                    last_target_area_ema = 0.0
                     last_target_aspect = 0.0
+                    last_target_aspect_ema = 0.0
                     pan_integral = 0.0
                     tilt_integral = 0.0
                     last_control_ms = 0
+                    track_error_x = 0
+                    track_error_y = 0
                     previous_target_cx = None
                     previous_target_cy = None
+                    previous_target_frame = 0
                     filtered_velocity_x = 0.0
                     filtered_velocity_y = 0.0
                     predict_only_count = 0
@@ -1362,8 +1637,12 @@ try:
                     last_target_center = None
                     stable_detect_count = 0
                     last_target_score = 0.0
+                    last_target_score_ema = 0.0
+                    last_target_class_id = -1
                     last_target_area = 0
+                    last_target_area_ema = 0.0
                     last_target_aspect = 0.0
+                    last_target_aspect_ema = 0.0
                     lock_confirm_count = 0
                     miss_count = 0
                     previous_error_x = 0
@@ -1371,8 +1650,11 @@ try:
                     pan_integral = 0.0
                     tilt_integral = 0.0
                     last_control_ms = 0
+                    track_error_x = 0
+                    track_error_y = 0
                     previous_target_cx = None
                     previous_target_cy = None
+                    previous_target_frame = 0
                     filtered_velocity_x = 0.0
                     filtered_velocity_y = 0.0
                     predict_only_count = 0
