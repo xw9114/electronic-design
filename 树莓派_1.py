@@ -747,15 +747,22 @@ class WebPreview:
 # 摄像头初始化
 # ============================================================
 def open_camera() -> cv2.VideoCapture:
-    cap = cv2.VideoCapture(CAMERA_DEVICE, cv2.CAP_V4L2)
-    cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc(*CAMERA_FOURCC))
-    cap.set(cv2.CAP_PROP_FRAME_WIDTH, CAMERA_WIDTH)
-    cap.set(cv2.CAP_PROP_FRAME_HEIGHT, CAMERA_HEIGHT)
-    cap.set(cv2.CAP_PROP_FPS, CAMERA_FPS)
-    cap.set(cv2.CAP_PROP_BUFFERSIZE, CAMERA_BUFFER_SIZE)
+    pipeline = (
+        f"v4l2src device={CAMERA_DEVICE} io-mode=2 ! "
+        f"image/jpeg,width={CAMERA_WIDTH},height={CAMERA_HEIGHT},"
+        f"framerate={CAMERA_FPS}/1 ! "
+        "jpegdec ! "
+        "videoconvert ! "
+        "video/x-raw,format=BGR ! "
+        "appsink drop=true max-buffers=1 sync=false"
+    )
+
+    cap = cv2.VideoCapture(pipeline, cv2.CAP_GSTREAMER)
 
     if not cap.isOpened():
-        raise RuntimeError(f"无法打开 USB 摄像头：{CAMERA_DEVICE}")
+        raise RuntimeError(
+            f"无法通过 GStreamer 打开 USB 摄像头：{CAMERA_DEVICE}"
+        )
 
     # 丢掉启动时可能残留的旧帧。
     for _ in range(5):
